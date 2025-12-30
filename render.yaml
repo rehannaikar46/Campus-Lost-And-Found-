@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: campus-lost-found
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: ADMIN_PASSWORD
+        sync: false
