@@ -14,8 +14,8 @@
   <div class="col">
     <h2>Signup / Login with SMS OTP</h2>
 
-    <label>Phone (E.164, e.g. +15551234567)</label>
-    <input id="phone" placeholder="+1555..." />
+    <label>Phone (India only — +91XXXXXXXXXX or 10 digits)</label>
+    <input id="phone" placeholder="+919876543210 or 9876543210" />
     <button id="send">Send OTP</button>
 
     <div id="otpSection" style="display:none">
@@ -36,8 +36,8 @@
       <input id="title" />
       <label>Description</label>
       <input id="desc" />
-      <label>Contact Phone (optional) — for found items, the original owner's phone to notify</label>
-      <input id="contactPhone" placeholder="+1555..." />
+      <label>Contact Phone (optional, India only) — for found items, the original owner's phone to notify</label>
+      <input id="contactPhone" placeholder="+919876543210 or 9876543210" />
       <button id="postItem">Post Item</button>
 
       <h3>All Posts</h3>
@@ -58,6 +58,16 @@
   </div>
 
   <script>
+    // Client-side India-only phone normalization/validation
+    function normalizeIndianPhoneClient(raw) {
+      if (!raw || typeof raw !== 'string') return null;
+      const p = raw.replace(/[^0-9+]/g, '');
+      if (/^\+91[6-9]\d{9}$/.test(p)) return p;
+      if (/^[6-9]\d{9}$/.test(p)) return '+91' + p;
+      if (/^0[6-9]\d{9}$/.test(p)) return '+91' + p.slice(1);
+      return null;
+    }
+
     const out = document.getElementById('out');
     const phoneEl = document.getElementById('phone');
     const otpEl = document.getElementById('otp');
@@ -66,17 +76,25 @@
     document.getElementById('send').onclick = async () => {
       const phone = phoneEl.value.trim();
       if (!phone) return alert('Enter phone');
-      const res = await fetch('/api/send-otp', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ phone }) });
+      const norm = normalizeIndianPhoneClient(phone);
+      if (!norm) return alert('Phone must be an Indian number: +91XXXXXXXXXX or 10 digits');
+      const res = await fetch('/api/send-otp', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ phone: norm }) });
       const j = await res.json();
       out.textContent = JSON.stringify(j, null, 2);
-      if (res.ok) otpSection.style.display = 'block';
+      if (res.ok) {
+        otpSection.style.display = 'block';
+        // prefill normalized phone so verify uses same form
+        phoneEl.value = norm;
+      }
     };
 
     document.getElementById('verify').onclick = async () => {
       const phone = phoneEl.value.trim();
       const code = otpEl.value.trim();
       if (!phone || !code) return alert('Provide phone and code');
-      const res = await fetch('/api/verify-otp', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ phone, code }) });
+      const norm = normalizeIndianPhoneClient(phone);
+      if (!norm) return alert('Phone must be an Indian number: +91XXXXXXXXXX or 10 digits');
+      const res = await fetch('/api/verify-otp', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ phone: norm, code }) });
       const j = await res.json();
       out.textContent = JSON.stringify(j, null, 2);
       if (res.ok) alert('Verified — proceed to create session/user');
@@ -101,7 +119,12 @@
       const type = document.getElementById('type').value;
       const title = document.getElementById('title').value.trim();
       const description = document.getElementById('desc').value.trim();
-      const contactPhone = document.getElementById('contactPhone').value.trim();
+      const contactPhoneRaw = document.getElementById('contactPhone').value.trim();
+      let contactPhone = null;
+      if (contactPhoneRaw) {
+        contactPhone = normalizeIndianPhoneClient(contactPhoneRaw);
+        if (!contactPhone) return alert('contactPhone must be an Indian number: +91XXXXXXXXXX or 10 digits');
+      }
       const res = await fetch('/api/post-item', { method: 'POST', headers: { 'content-type':'application/json', 'x-token': token }, body: JSON.stringify({ type, title, description, contactPhone }) });
       const j = await res.json();
       out.textContent = JSON.stringify(j, null, 2);

@@ -38,6 +38,17 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
   twilioClient = Twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 }
 
+// Helper: normalize and validate Indian phone numbers.
+// Accepts E.164 +91XXXXXXXXXX, 10-digit numbers starting with 6-9, or 0XXXXXXXXXX.
+function normalizeIndianPhone(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const p = raw.replace(/[^0-9+]/g, '');
+  if (/^\+91[6-9]\d{9}$/.test(p)) return p;
+  if (/^[6-9]\d{9}$/.test(p)) return '+91' + p;
+  if (/^0[6-9]\d{9}$/.test(p)) return '+91' + p.slice(1);
+  return null;
+}
+
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -62,15 +73,18 @@ app.post('/api/send-otp', otpLimiter, async (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'phone is required' });
 
+  const norm = normalizeIndianPhone(phone);
+  if (!norm) return res.status(400).json({ error: 'phone must be an Indian number (e.g. +91XXXXXXXXXX or 10 digits)' });
+
   const code = generateOtp();
   const expiresAt = Date.now() + OTP_TTL_MS;
-  store.set(phone, { code, expiresAt });
+  store.set(norm, { code, expiresAt });
 
   const message = `Your Campus Lost & Found OTP is ${code}. It expires in 5 minutes.`;
 
   try {
-    const r = await sendSms(phone, message);
-    return res.json({ ok: true, sent: r.sent, note: r.sent ? undefined : 'Twilio not configured; SMS logged to server console' });
+    const r = await sendSms(norm, message);
+    return res.json({ ok: true, sent: r.sent, note: r.sent ? undefined : 'Twilio not configured; SMS logged to server console', phone: norm });
   } catch (err) {
     console.error('Twilio send error', err);
     return res.status(500).json({ error: 'failed to send sms' });
@@ -81,24 +95,27 @@ app.post('/api/verify-otp', (req, res) => {
   const { phone, code } = req.body;
   if (!phone || !code) return res.status(400).json({ error: 'phone and code are required' });
 
-  const entry = store.get(phone);
+  const norm = normalizeIndianPhone(phone);
+  if (!norm) return res.status(400).json({ error: 'phone must be an Indian number (e.g. +91XXXXXXXXXX or 10 digits)' });
+
+  const entry = store.get(norm);
   if (!entry) return res.status(400).json({ ok: false, error: 'no otp requested for this phone' });
 
   if (Date.now() > entry.expiresAt) {
-    store.delete(phone);
+    store.delete(norm);
     return res.status(400).json({ ok: false, error: 'otp expired' });
   }
 
   if (entry.code !== code) return res.status(400).json({ ok: false, error: 'invalid otp' });
 
-  store.delete(phone);
+  store.delete(norm);
   // Create user if doesn't exist
-  if (!users.has(phone)) {
-    users.set(phone, { phone, createdAt: Date.now(), blocked: false });
+  if (!users.has(norm)) {
+    users.set(norm, { phone: norm, createdAt: Date.now(), blocked: false });
   }
 
   // For demo, return a simple token (the phone) — replace with real session/token in prod
-  return res.json({ ok: true, message: 'verified', token: phone });
+  return res.json({ ok: true, message: 'verified', token: norm });
 });
 
 // Protected helper for demo: token is just the phone string
@@ -116,16 +133,22 @@ app.post('/api/post-item', postLimiter, async (req, res) => {
   const { type, title, description, contactPhone } = req.body;
   if (!type || !title) return res.status(400).json({ error: 'type and title required' });
 
+  let contact = null;
+  if (contactPhone) {
+    contact = normalizeIndianPhone(contactPhone);
+    if (!contact) return res.status(400).json({ error: 'contactPhone must be an Indian number (e.g. +91XXXXXXXXXX or 10 digits)' });
+  }
+
   const id = posts.length + 1;
-  const post = { id, posterPhone: user.phone, type, title, description: description || '', contactPhone: contactPhone || null, createdAt: Date.now() };
+  const post = { id, posterPhone: user.phone, type, title, description: description || '', contactPhone: contact || null, createdAt: Date.now() };
   posts.push(post);
 
   // Notify poster
   await sendSms(user.phone, `You posted the item (${type}) successfully: ${title}`);
 
   // If this is a 'found' post and the poster provided a contactPhone, notify that contact
-  if (type === 'found' && contactPhone) {
-    await sendSms(contactPhone, `Your item may have been found: ${title}. Contact: ${user.phone}`);
+  if (type === 'found' && contact) {
+    await sendSms(contact, `Your item may have been found: ${title}. Contact: ${user.phone}`);
   }
 
   return res.json({ ok: true, post });

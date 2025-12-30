@@ -96,6 +96,11 @@ https://<your-service-name>.onrender.com/index.html
 
 - [ ] Add `ADMIN_PASSWORD` to `.env`
 - [ ] Configure Twilio credentials for real SMS
+ 
+### India-only notes
+
+- This demo is currently restricted to Indian phone numbers only. Enter numbers as `+91XXXXXXXXXX` or `10`-digit mobile numbers (e.g. `9876543210`).
+- If using Twilio, ensure your `TWILIO_FROM` number and account are allowed to send SMS to India.
 - [ ] Replace in-memory storage with database
 - [ ] Add rate limiting middleware
 - [ ] Enable HTTPS (Render does this automatically)

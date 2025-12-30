@@ -5,6 +5,7 @@ A Node.js/Express app with OTP SMS verification, lost/found posting, user profil
 ## Features
 
 - **OTP SMS Verification**: Sign up and login via 6-digit OTP sent via Twilio (or logged to console).
+ - **OTP SMS Verification (India only)**: Sign up and login via 6-digit OTP sent to Indian phone numbers (+91 or 10-digit).
 - **Post Items**: Users can post "Lost" or "Found" items with descriptions.
 - **Delete Account**: Users can delete their account and all posts.
 - **SMS Notifications**: Poster gets confirmation; found-item contacts are notified via SMS.
@@ -44,6 +45,7 @@ npm start
 ## How It Works
 
 - **Send OTP**: Enter a phone number (e.g., `+15551234567`). Server generates a 6-digit code.
+ - **Send OTP**: Enter a phone number (India only — e.g., `+919876543210` or `9876543210`). Server generates a 6-digit code.
   - If Twilio is configured, SMS is sent; otherwise, code is logged to console.
 - **Verify OTP**: Enter the 6-digit code to authenticate and create a user.
 - **Post Items**: Choose "Lost" or "Found", add title/description, and submit.
