@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OTP Demo Signup/Login</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:40px}
+    input,button{padding:8px;margin:6px 0;width:100%}
+    .col{max-width:380px}
+  </style>
+</head>
+<body>
+  <div class="col">
+    <h2>Signup / Login with SMS OTP</h2>
+
+    <label>Phone (E.164, e.g. +15551234567)</label>
+    <input id="phone" placeholder="+1555..." />
+    <button id="send">Send OTP</button>
+
+    <div id="otpSection" style="display:none">
+      <label>Enter OTP</label>
+      <input id="otp" placeholder="6-digit code" />
+      <button id="verify">Verify OTP</button>
+    </div>
+
+    <div id="appSection" style="display:none">
+      <h3>Profile</h3>
+      <div>Logged in as <span id="me"></span></div>
+      <button id="deleteAccount">Delete Account</button>
+
+      <h3>Post Item</h3>
+      <label>Type</label>
+      <select id="type"><option value="found">Found</option><option value="lost">Lost</option></select>
+      <label>Title</label>
+      <input id="title" />
+      <label>Description</label>
+      <input id="desc" />
+      <label>Contact Phone (optional) — for found items, the original owner's phone to notify</label>
+      <input id="contactPhone" placeholder="+1555..." />
+      <button id="postItem">Post Item</button>
+
+      <h3>All Posts</h3>
+      <div id="posts"></div>
+
+      <h3>Admin</h3>
+      <label>Admin Password</label>
+      <input id="adminPass" placeholder="admin password" />
+      <button id="adminLogin">Admin Login</button>
+      <div id="adminArea" style="display:none">
+        <button id="refreshAdmin">Refresh Admin Data</button>
+        <div id="adminUsers"></div>
+        <div id="adminPosts"></div>
+      </div>
+    </div>
+
+    <pre id="out"></pre>
+  </div>
+
+  <script>
+    const out = document.getElementById('out');
+    const phoneEl = document.getElementById('phone');
+    const otpEl = document.getElementById('otp');
+    const otpSection = document.getElementById('otpSection');
+
+    document.getElementById('send').onclick = async () => {
+      const phone = phoneEl.value.trim();
+      if (!phone) return alert('Enter phone');
+      const res = await fetch('/api/send-otp', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ phone }) });
+      const j = await res.json();
+      out.textContent = JSON.stringify(j, null, 2);
+      if (res.ok) otpSection.style.display = 'block';
+    };
+
+    document.getElementById('verify').onclick = async () => {
+      const phone = phoneEl.value.trim();
+      const code = otpEl.value.trim();
+      if (!phone || !code) return alert('Provide phone and code');
+      const res = await fetch('/api/verify-otp', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ phone, code }) });
+      const j = await res.json();
+      out.textContent = JSON.stringify(j, null, 2);
+      if (res.ok) alert('Verified — proceed to create session/user');
+      if (res.ok && j.token) {
+        localStorage.setItem('token', j.token);
+        showApp(j.token);
+      }
+    };
+
+    function showApp(token) {
+      document.getElementById('appSection').style.display = 'block';
+      document.getElementById('otpSection').style.display = 'none';
+      document.getElementById('me').textContent = token;
+      loadPosts();
+    }
+
+    const token = localStorage.getItem('token');
+    if (token) showApp(token);
+
+    document.getElementById('postItem').onclick = async () => {
+      const token = localStorage.getItem('token');
+      const type = document.getElementById('type').value;
+      const title = document.getElementById('title').value.trim();
+      const description = document.getElementById('desc').value.trim();
+      const contactPhone = document.getElementById('contactPhone').value.trim();
+      const res = await fetch('/api/post-item', { method: 'POST', headers: { 'content-type':'application/json', 'x-token': token }, body: JSON.stringify({ type, title, description, contactPhone }) });
+      const j = await res.json();
+      out.textContent = JSON.stringify(j, null, 2);
+      if (res.ok) loadPosts();
+    };
+
+    document.getElementById('deleteAccount').onclick = async () => {
+      if (!confirm('Delete your account and posts?')) return;
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/delete-account', { method: 'POST', headers: { 'content-type':'application/json', 'x-token': token }, body: JSON.stringify({}) });
+      const j = await res.json();
+      out.textContent = JSON.stringify(j, null, 2);
+      if (res.ok) { localStorage.removeItem('token'); location.reload(); }
+    };
+
+    async function loadPosts() {
+      const res = await fetch('/api/posts');
+      const j = await res.json();
+      const box = document.getElementById('posts');
+      box.innerHTML = '';
+      if (j && j.posts) {
+        j.posts.slice().reverse().forEach(p => {
+          const el = document.createElement('div');
+          el.style.border = '1px solid #ccc';
+          el.style.margin = '6px';
+          el.style.padding = '6px';
+          el.textContent = `${p.type.toUpperCase()} - ${p.title} (${p.posterPhone}) ${p.contactPhone? ' contact: '+p.contactPhone : ''}`;
+          box.appendChild(el);
+        });
+      }
+    }
+
+    // Admin
+    document.getElementById('adminLogin').onclick = async () => {
+      const password = document.getElementById('adminPass').value;
+      const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify({ password }) });
+      const j = await res.json();
+      out.textContent = JSON.stringify(j, null, 2);
+      if (res.ok && j.token) {
+        localStorage.setItem('adminToken', j.token);
+        document.getElementById('adminArea').style.display = 'block';
+        loadAdmin();
+      }
+    };
+
+    async function loadAdmin() {
+      const t = localStorage.getItem('adminToken');
+      const u = await fetch('/api/admin/users', { headers: { 'x-admin-token': t } });
+      const ju = await u.json();
+      const up = document.getElementById('adminUsers');
+      up.innerHTML = '<h4>Users</h4>' + JSON.stringify(ju, null, 2);
+
+      const p = await fetch('/api/admin/posts', { headers: { 'x-admin-token': t } });
+      const jp = await p.json();
+      const pp = document.getElementById('adminPosts');
+      pp.innerHTML = '<h4>Posts</h4>' + JSON.stringify(jp, null, 2);
+    }
+
+    document.getElementById('refreshAdmin').onclick = loadAdmin;
+  </script>
+</body>
+</html>

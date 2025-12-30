@@ -1,0 +1,451 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Campus Lost & Found - OTP Auth</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { text-align: center; color: white; margin-bottom: 40px; }
+    .header h1 { font-size: 32px; margin-bottom: 10px; }
+    .header p { font-size: 16px; opacity: 0.9; }
+    .main-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 30px; margin-bottom: 40px; }
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+    .card { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+    .card h2 { color: #333; margin-bottom: 20px; font-size: 22px; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+    .card h3 { color: #555; margin: 20px 0 15px; font-size: 16px; }
+    label { display: block; color: #666; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+    input, select, textarea { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; transition: border-color 0.2s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+    button { background: #667eea; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: background 0.2s; width: 100%; }
+    button:hover { background: #5568d3; }
+    button.secondary { background: #6c757d; }
+    button.secondary:hover { background: #5a6268; }
+    button.danger { background: #e74c3c; }
+    button.danger:hover { background: #c0392b; }
+    button.success { background: #27ae60; }
+    button.success:hover { background: #229954; }
+    .form-group { margin-bottom: 15px; }
+    .error { color: #e74c3c; font-size: 12px; margin-top: -12px; margin-bottom: 12px; }
+    .success-msg { background: #d4edda; color: #155724; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: none; }
+    .error-msg { background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: none; }
+    .post-item { background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 12px; border-left: 4px solid #667eea; }
+    .post-item .type { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; margin-bottom: 8px; }
+    .post-item .type.found { background: #d4edda; color: #155724; }
+    .post-item .type.lost { background: #fff3cd; color: #856404; }
+    .post-item .title { font-weight: 600; color: #333; margin: 8px 0; }
+    .post-item .meta { font-size: 12px; color: #666; }
+    .post-item .desc { color: #555; margin: 8px 0; font-size: 14px; }
+    .admin-section { background: #fff3cd; padding: 20px; border-radius: 6px; margin-top: 20px; border: 1px solid #ffc107; }
+    .user-item { background: #f0f0f0; padding: 12px; margin-bottom: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .user-item.blocked { opacity: 0.6; background: #ffebee; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge.admin { background: #667eea; color: white; }
+    .badge.blocked { background: #e74c3c; color: white; }
+    .hidden { display: none; }
+    .text-center { text-align: center; }
+    .mt-20 { margin-top: 20px; }
+    .logout-btn { background: #6c757d; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔍 Campus Lost & Found</h1>
+      <p>Find & Recover Lost Items with OTP Authentication</p>
+    </div>
+
+    <!-- AUTH SECTION -->
+    <div id="authSection" class="card">
+      <h2>Sign In / Sign Up</h2>
+      <div class="error-msg" id="authError"></div>
+      <div class="success-msg" id="authSuccess"></div>
+      
+      <div class="form-group">
+        <label>Phone Number (E.164 format, e.g., +15551234567)</label>
+        <input id="phone" type="tel" placeholder="+1234567890" />
+        <div class="error" id="phoneError"></div>
+      </div>
+      
+      <button id="sendOtpBtn">Send OTP</button>
+      
+      <div id="otpForm" class="hidden" style="margin-top: 20px;">
+        <div class="form-group">
+          <label>Enter 6-Digit OTP</label>
+          <input id="otp" type="text" placeholder="000000" maxlength="6" />
+          <div class="error" id="otpError"></div>
+        </div>
+        <button id="verifyOtpBtn">Verify OTP</button>
+      </div>
+    </div>
+
+    <!-- APP SECTION -->
+    <div id="appSection" class="hidden">
+      <div class="header">
+        <div style="color: white; text-align: right; margin-bottom: 20px;">
+          <span>Logged in as <strong id="currentUser"></strong></span>
+          <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
+      </div>
+
+      <div class="main-grid">
+        <!-- SIDEBAR -->
+        <div>
+          <div class="card">
+            <h2>Profile</h2>
+            <p style="color: #666; margin-bottom: 20px; font-size: 14px;">Manage your account and view your activity.</p>
+            <button id="myPostsBtn" style="margin-bottom: 10px;">📋 My Posts</button>
+            <button class="secondary" id="profileBtn" style="margin-bottom: 10px;">👤 Profile Settings</button>
+            <button class="danger" id="deleteAccountBtn">🗑️ Delete Account</button>
+          </div>
+
+          <div class="card mt-20">
+            <h2>Admin Panel</h2>
+            <div id="adminNotLoggedIn">
+              <p style="color: #666; margin-bottom: 20px; font-size: 14px;">Admin access with password.</p>
+              <input id="adminPassword" type="password" placeholder="Admin password" />
+              <button id="adminLoginBtn">Login as Admin</button>
+            </div>
+            <div id="adminLoggedIn" class="hidden">
+              <p style="color: #27ae60; margin-bottom: 15px; font-weight: 600;">✓ Admin Access Active</p>
+              <button id="viewUsersBtn" style="margin-bottom: 10px;">👥 View Users</button>
+              <button class="secondary" id="viewAllPostsBtn" style="margin-bottom: 10px;">📊 View All Posts</button>
+              <button class="danger" id="adminLogoutBtn">Logout Admin</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div>
+          <!-- POST ITEM -->
+          <div class="card" id="postItemCard">
+            <h2>Post an Item</h2>
+            <div class="error-msg" id="postError"></div>
+            <div class="success-msg" id="postSuccess"></div>
+
+            <div class="form-group">
+              <label>Item Type</label>
+              <select id="itemType">
+                <option value="found">Found Item</option>
+                <option value="lost">Lost Item</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Title</label>
+              <input id="itemTitle" placeholder="e.g., Blue Backpack, Keys, etc." />
+              <div class="error" id="titleError"></div>
+            </div>
+
+            <div class="form-group">
+              <label>Description</label>
+              <textarea id="itemDesc" placeholder="Describe the item, where you found/lost it, color, brand, etc." rows="4"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Contact Phone (optional)</label>
+              <input id="itemContact" type="tel" placeholder="+1234567890" />
+              <div class="error" id="contactError"></div>
+            </div>
+
+            <button id="postItemBtn">Post Item</button>
+          </div>
+
+          <!-- ALL POSTS -->
+          <div class="card mt-20" id="allPostsCard">
+            <h2>Recent Posts</h2>
+            <div id="postsList"></div>
+          </div>
+
+          <!-- MY POSTS -->
+          <div class="card mt-20 hidden" id="myPostsCard">
+            <h2>My Posts</h2>
+            <button class="secondary" id="backFromMyPosts" style="margin-bottom: 15px;">← Back</button>
+            <div id="myPostsList"></div>
+          </div>
+
+          <!-- ADMIN USERS VIEW -->
+          <div class="card mt-20 hidden" id="adminUsersCard">
+            <h2>All Users</h2>
+            <button class="secondary" id="backFromUsers" style="margin-bottom: 15px;">← Back</button>
+            <div id="usersList"></div>
+          </div>
+
+          <!-- ADMIN POSTS VIEW -->
+          <div class="card mt-20 hidden" id="adminPostsCard">
+            <h2>All Posts (Admin)</h2>
+            <button class="secondary" id="backFromAllPosts" style="margin-bottom: 15px;">← Back</button>
+            <div id="adminPostsList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:3000';
+    let currentToken = localStorage.getItem('token');
+    let adminToken = localStorage.getItem('adminToken');
+
+    // Validation helpers
+    function validatePhone(phone) { return /^\+\d{1,15}$/.test(phone.trim()); }
+    function validateOtp(otp) { return /^\d{6}$/.test(otp.trim()); }
+    function showError(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+    function clearError(el) { el.textContent = ''; el.style.display = 'none'; }
+    function showMsg(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+    function hideMsg(el) { el.style.display = 'none'; }
+
+    function showApp() {
+      document.getElementById('authSection').style.display = 'none';
+      document.getElementById('appSection').style.display = 'block';
+      document.getElementById('currentUser').textContent = currentToken;
+      loadAllPosts();
+    }
+
+    function hideApp() {
+      document.getElementById('authSection').style.display = 'block';
+      document.getElementById('appSection').style.display = 'none';
+      document.getElementById('authSection').scrollIntoView();
+    }
+
+    // OTP Flow
+    document.getElementById('sendOtpBtn').onclick = async () => {
+      const phone = document.getElementById('phone').value.trim();
+      clearError(document.getElementById('phoneError'));
+      if (!validatePhone(phone)) return showError(document.getElementById('phoneError'), 'Invalid phone format. Use E.164 (e.g., +15551234567)');
+      try {
+        const r = await fetch(`${API}/api/send-otp`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone }) });
+        const j = await r.json();
+        if (r.ok) {
+          showMsg(document.getElementById('authSuccess'), j.sent ? 'OTP sent! Check SMS.' : 'OTP generated (check console for dev code).');
+          document.getElementById('otpForm').style.display = 'block';
+        } else showMsg(document.getElementById('authError'), j.error || 'Error sending OTP');
+      } catch (e) { showMsg(document.getElementById('authError'), 'Network error'); }
+    };
+
+    document.getElementById('verifyOtpBtn').onclick = async () => {
+      const phone = document.getElementById('phone').value.trim();
+      const otp = document.getElementById('otp').value.trim();
+      clearError(document.getElementById('otpError'));
+      if (!validateOtp(otp)) return showError(document.getElementById('otpError'), 'OTP must be 6 digits');
+      try {
+        const r = await fetch(`${API}/api/verify-otp`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone, code: otp }) });
+        const j = await r.json();
+        if (r.ok && j.token) {
+          currentToken = j.token;
+          localStorage.setItem('token', currentToken);
+          showApp();
+        } else showMsg(document.getElementById('authError'), j.error || 'Invalid OTP');
+      } catch (e) { showMsg(document.getElementById('authError'), 'Network error'); }
+    };
+
+    document.getElementById('logoutBtn').onclick = () => {
+      localStorage.removeItem('token');
+      currentToken = null;
+      document.getElementById('phone').value = '';
+      document.getElementById('otp').value = '';
+      document.getElementById('otpForm').style.display = 'none';
+      hideApp();
+    };
+
+    // Post Item
+    document.getElementById('postItemBtn').onclick = async () => {
+      const type = document.getElementById('itemType').value;
+      const title = document.getElementById('itemTitle').value.trim();
+      const description = document.getElementById('itemDesc').value.trim();
+      const contact = document.getElementById('itemContact').value.trim();
+      clearError(document.getElementById('titleError'));
+      if (!title) return showError(document.getElementById('titleError'), 'Title is required');
+      if (contact && !validatePhone(contact)) return showError(document.getElementById('contactError'), 'Invalid phone format');
+      try {
+        const r = await fetch(`${API}/api/post-item`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-token': currentToken }, body: JSON.stringify({ type, title, description, contactPhone: contact || null }) });
+        const j = await r.json();
+        if (r.ok) {
+          showMsg(document.getElementById('postSuccess'), 'Item posted! You\'ll receive SMS confirmation.');
+          document.getElementById('itemTitle').value = '';
+          document.getElementById('itemDesc').value = '';
+          document.getElementById('itemContact').value = '';
+          setTimeout(() => loadAllPosts(), 1000);
+        } else showMsg(document.getElementById('postError'), j.error || 'Error posting');
+      } catch (e) { showMsg(document.getElementById('postError'), 'Network error'); }
+    };
+
+    async function loadAllPosts() {
+      try {
+        const r = await fetch(`${API}/api/posts`);
+        const j = await r.json();
+        const box = document.getElementById('postsList');
+        box.innerHTML = '';
+        if (j.posts && j.posts.length > 0) {
+          j.posts.slice().reverse().forEach(p => {
+            box.innerHTML += `
+              <div class="post-item">
+                <span class="type ${p.type}">${p.type.toUpperCase()}</span>
+                <div class="title">${p.title}</div>
+                <div class="meta">By: ${p.posterPhone} | ${new Date(p.createdAt).toLocaleDateString()}</div>
+                ${p.description ? `<div class="desc">${p.description}</div>` : ''}
+                ${p.contactPhone ? `<div class="meta">Contact: ${p.contactPhone}</div>` : ''}
+              </div>
+            `;
+          });
+        } else box.innerHTML = '<p style="color:#666; text-align:center;">No posts yet.</p>';
+      } catch (e) { console.error(e); }
+    }
+
+    // My Posts
+    document.getElementById('myPostsBtn').onclick = async () => {
+      try {
+        const r = await fetch(`${API}/api/posts`);
+        const j = await r.json();
+        const myPosts = j.posts ? j.posts.filter(p => p.posterPhone === currentToken) : [];
+        const box = document.getElementById('myPostsList');
+        box.innerHTML = '';
+        if (myPosts.length > 0) {
+          myPosts.slice().reverse().forEach(p => {
+            box.innerHTML += `
+              <div class="post-item">
+                <span class="type ${p.type}">${p.type.toUpperCase()}</span>
+                <div class="title">${p.title}</div>
+                <div class="meta">${new Date(p.createdAt).toLocaleDateString()}</div>
+                ${p.description ? `<div class="desc">${p.description}</div>` : ''}
+              </div>
+            `;
+          });
+        } else box.innerHTML = '<p style="color:#666; text-align:center;">You haven\'t posted anything yet.</p>';
+        document.getElementById('postItemCard').style.display = 'none';
+        document.getElementById('allPostsCard').style.display = 'none';
+        document.getElementById('myPostsCard').style.display = 'block';
+      } catch (e) { console.error(e); }
+    };
+
+    document.getElementById('backFromMyPosts').onclick = () => {
+      document.getElementById('postItemCard').style.display = 'block';
+      document.getElementById('allPostsCard').style.display = 'block';
+      document.getElementById('myPostsCard').style.display = 'none';
+    };
+
+    document.getElementById('deleteAccountBtn').onclick = async () => {
+      if (!confirm('Delete your account and all posts? This cannot be undone.')) return;
+      try {
+        const r = await fetch(`${API}/api/delete-account`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-token': currentToken }, body: JSON.stringify({}) });
+        if (r.ok) {
+          localStorage.removeItem('token');
+          currentToken = null;
+          hideApp();
+          alert('Account deleted.');
+        }
+      } catch (e) { console.error(e); }
+    };
+
+    // Admin
+    document.getElementById('adminLoginBtn').onclick = async () => {
+      const pwd = document.getElementById('adminPassword').value;
+      if (!pwd) return alert('Enter password');
+      try {
+        const r = await fetch(`${API}/api/admin/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
+        const j = await r.json();
+        if (r.ok && j.token) {
+          adminToken = j.token;
+          localStorage.setItem('adminToken', adminToken);
+          document.getElementById('adminNotLoggedIn').style.display = 'none';
+          document.getElementById('adminLoggedIn').style.display = 'block';
+          document.getElementById('adminPassword').value = '';
+        } else alert('Invalid admin password');
+      } catch (e) { console.error(e); }
+    };
+
+    document.getElementById('adminLogoutBtn').onclick = () => {
+      localStorage.removeItem('adminToken');
+      adminToken = null;
+      document.getElementById('adminNotLoggedIn').style.display = 'block';
+      document.getElementById('adminLoggedIn').style.display = 'none';
+      document.getElementById('postItemCard').style.display = 'block';
+      document.getElementById('allPostsCard').style.display = 'block';
+    };
+
+    document.getElementById('viewUsersBtn').onclick = async () => {
+      if (!adminToken) return;
+      try {
+        const r = await fetch(`${API}/api/admin/users`, { headers: { 'x-admin-token': adminToken } });
+        const j = await r.json();
+        const box = document.getElementById('usersList');
+        box.innerHTML = '';
+        if (j.users && j.users.length > 0) {
+          j.users.forEach(u => {
+            box.innerHTML += `
+              <div class="user-item ${u.blocked ? 'blocked' : ''}">
+                <div>
+                  <strong>${u.phone}</strong><br/>
+                  <span style="font-size:12px; color:#666;">Joined: ${new Date(u.createdAt).toLocaleDateString()}</span>
+                  ${u.blocked ? '<br/><span class="badge blocked">BLOCKED</span>' : ''}
+                </div>
+                ${!u.blocked ? `<button style="width:auto; padding:8px 12px; background:#e74c3c;" onclick="blockUser('${u.phone}')">Block</button>` : ''}
+              </div>
+            `;
+          });
+        }
+        document.getElementById('postItemCard').style.display = 'none';
+        document.getElementById('allPostsCard').style.display = 'none';
+        document.getElementById('adminUsersCard').style.display = 'block';
+      } catch (e) { console.error(e); }
+    };
+
+    document.getElementById('viewAllPostsBtn').onclick = async () => {
+      if (!adminToken) return;
+      try {
+        const r = await fetch(`${API}/api/admin/posts`, { headers: { 'x-admin-token': adminToken } });
+        const j = await r.json();
+        const box = document.getElementById('adminPostsList');
+        box.innerHTML = '';
+        if (j.posts && j.posts.length > 0) {
+          j.posts.slice().reverse().forEach(p => {
+            box.innerHTML += `
+              <div class="post-item">
+                <span class="type ${p.type}">${p.type.toUpperCase()}</span>
+                <div class="title">${p.title}</div>
+                <div class="meta">By: <strong>${p.posterPhone}</strong> | ${new Date(p.createdAt).toLocaleDateString()}</div>
+                ${p.description ? `<div class="desc">${p.description}</div>` : ''}
+              </div>
+            `;
+          });
+        }
+        document.getElementById('postItemCard').style.display = 'none';
+        document.getElementById('allPostsCard').style.display = 'none';
+        document.getElementById('adminPostsCard').style.display = 'block';
+      } catch (e) { console.error(e); }
+    };
+
+    document.getElementById('backFromUsers').onclick = () => {
+      document.getElementById('postItemCard').style.display = 'block';
+      document.getElementById('allPostsCard').style.display = 'block';
+      document.getElementById('adminUsersCard').style.display = 'none';
+    };
+
+    document.getElementById('backFromAllPosts').onclick = () => {
+      document.getElementById('postItemCard').style.display = 'block';
+      document.getElementById('allPostsCard').style.display = 'block';
+      document.getElementById('adminPostsCard').style.display = 'none';
+    };
+
+    async function blockUser(phone) {
+      if (!confirm(`Block ${phone}?`)) return;
+      try {
+        const r = await fetch(`${API}/api/admin/block-user`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-token': adminToken }, body: JSON.stringify({ phone }) });
+        if (r.ok) {
+          alert('User blocked');
+          document.getElementById('viewUsersBtn').onclick();
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    // Init
+    if (currentToken) showApp();
+    if (adminToken) {
+      document.getElementById('adminNotLoggedIn').style.display = 'none';
+      document.getElementById('adminLoggedIn').style.display = 'block';
+    }
+  </script>
+</body>
+</html>
